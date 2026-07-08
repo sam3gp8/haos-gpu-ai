@@ -1,0 +1,11 @@
+[Unit]
+Description=HAOS GPU/AI decoupled OTA updater (custom RAUC bundle from GitHub Releases)
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/usr/bin/haos-gpu-updater.sh
+
+[Service]
+Type=oneshot
+# Point this at your fork; overrides the script default.
+Environment=HAOS_GPU_UPDATE_REPO=your-org/haos-gpu-ai
+ExecStart=/usr/bin/haos-gpu-updater.sh

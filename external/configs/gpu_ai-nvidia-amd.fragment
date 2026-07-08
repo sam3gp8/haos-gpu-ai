@@ -1,0 +1,25 @@
+# =============================================================================
+# HAOS GPU/AI - ADDITIVE fragment for the 'nvidia-amd' first-green profile
+# =============================================================================
+# Enables NVIDIA + AMD only. The Intel package is left off by explicitly
+# DISABLING the ALL master switch (which would otherwise force-select all three
+# via `select`, and defaults to y) and enabling the two vendors directly.
+#
+# As with gpu_ai.fragment, multi-value vars are appended by merge-defconfig.sh,
+# not re-assigned here.
+# =============================================================================
+
+# Turn the master switch OFF so it does not force-select the Intel package.
+# BR2_PACKAGE_HAOS_GPU_AI_ALL is not set
+
+# Enable the two first-green vendors explicitly.
+BR2_PACKAGE_HAOS_COMPUTE_NVIDIA=y
+BR2_PACKAGE_HAOS_COMPUTE_AMD=y
+# BR2_PACKAGE_HAOS_COMPUTE_INTEL is not set
+
+# AMD needs its firmware blobs from linux-firmware.
+BR2_PACKAGE_LINUX_FIRMWARE=y
+
+# glibc utilities: installs ldconfig, which nvidia-container-toolkit >=1.17
+# REQUIRES on the host (it bind-mounts the host ldconfig into GPU containers).
+BR2_PACKAGE_GLIBC_UTILS=y

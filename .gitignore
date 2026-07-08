@@ -1,0 +1,16 @@
+# Build output
+/output/
+/release/
+
+# Generated defconfig (produced by merge-defconfig.sh from the fragment)
+/external/configs/generic_x86_64_gpu_ai_defconfig
+
+# RAUC signing material - NEVER commit the private key
+/pki/
+key.pem
+cert.pem
+*.pem
+
+# Editor / OS cruft
+*.swp
+.DS_Store

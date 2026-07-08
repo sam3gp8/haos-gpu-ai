@@ -1,0 +1,19 @@
+[Unit]
+Description=HAOS GPU/AI vendor autodetect and driver load
+DefaultDependencies=no
+Wants=systemd-udevd.service
+After=systemd-udev-settle.service systemd-modules-load.service
+# NOTE: /etc/docker is on the READ-ONLY rootfs (no separate mount); default-
+# runtime is baked into daemon.json at build time. RequiresMountsFor is kept
+# only as a harmless ordering hint.
+RequiresMountsFor=/etc/docker
+Before=docker.service
+ConditionPathExists=/usr/bin/gpu-autodetect.sh
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=-/usr/bin/gpu-autodetect.sh
+
+[Install]
+WantedBy=multi-user.target

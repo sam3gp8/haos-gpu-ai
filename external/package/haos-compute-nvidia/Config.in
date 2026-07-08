@@ -1,0 +1,44 @@
+config BR2_PACKAGE_HAOS_COMPUTE_NVIDIA
+	bool "NVIDIA proprietary compute stack (open kernel modules + UVM + driver libs)"
+	default y if BR2_PACKAGE_HAOS_GPU_AI_ALL
+	depends on BR2_x86_64
+	depends on BR2_LINUX_KERNEL
+	select BR2_PACKAGE_HAOS_NVIDIA_CONTAINER_TOOLKIT
+	help
+	  Builds the NVIDIA "open" GPU kernel modules against the HAOS kernel and
+	  installs the matching proprietary user-space driver libraries required
+	  on the HOST:
+
+	    Kernel modules : nvidia.ko, nvidia-uvm.ko, nvidia-modeset.ko,
+	                     nvidia-drm.ko, nvidia-peermem.ko
+	    Host libraries : libcuda, libnvidia-ml, libnvidia-ptxjitcompiler
+	    Helpers        : nvidia-modprobe (setuid, creates /dev nodes), nvidia-smi
+
+	  The OPEN modules are used because they are the vendor-recommended and
+	  build-reliable path for Turing (RTX 20xx) and newer GPUs on recent
+	  kernels. This stack therefore requires a GPU of Turing generation or
+	  later.
+
+	  IMPORTANT: the CUDA *runtime* (libcudart, libnvrtc, cuBLAS, ...) is NOT
+	  installed on the host. It ships inside the add-on container. The NVIDIA
+	  Container Toolkit (auto-selected) injects the host driver libraries above
+	  into the container at run time, which is why only the driver-provided
+	  libraries live in the base OS.
+
+if BR2_PACKAGE_HAOS_COMPUTE_NVIDIA
+
+config BR2_PACKAGE_HAOS_COMPUTE_NVIDIA_VERSION
+	string "NVIDIA driver version"
+	default "595.84"
+	help
+	  Driver/branch version. Must be a release whose open kernel modules
+	  support the pinned HAOS kernel. Bump this together with any kernel jump;
+	  the CI kernel<->driver gate fails the build on an incompatible pair.
+
+	  Kernel reference points (verify against NVIDIA's Unix driver page):
+	    535 -> up to ~6.5    550 -> up to ~6.11
+	    580.126.18 fixes the kernel 6.19 module build
+	    595.84 = current Production Branch (covers 6.18/6.19-era kernels)
+	  HAOS 18.1 ships kernel 6.18.37, so 595.84 is the correct floor here.
+
+endif

@@ -1,0 +1,15 @@
+[Unit]
+Description=Seed bundled local add-ons onto the Supervisor data partition
+RequiresMountsFor=/mnt/data
+After=mnt-data.mount hassos-data.service
+Before=hassos-supervisor.service
+ConditionPathExists=/usr/bin/seed-local-addons.sh
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# '-' prefix: a seeding hiccup must never block boot or the Supervisor.
+ExecStart=-/usr/bin/seed-local-addons.sh
+
+[Install]
+WantedBy=multi-user.target

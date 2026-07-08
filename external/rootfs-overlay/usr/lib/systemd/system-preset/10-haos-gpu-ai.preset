@@ -1,0 +1,11 @@
+# Enable the HAOS GPU-AI services.
+#
+# HAOS runs `systemctl preset-all` during image finalize with a disable-by-
+# default policy, which strips any enable-symlinks a post-build script creates.
+# A preset file is the canonical, preset-all-proof way to enable units: on
+# preset-all, the first matching rule wins, and this low-numbered file is read
+# before HAOS's catch-all `disable *`, so our two units end up enabled.
+enable gpu-autodetect.service
+enable haos-gpu-updater.timer
+enable rauc-mark-good.service
+enable seed-local-addons.service

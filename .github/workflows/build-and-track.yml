@@ -1,0 +1,203 @@
+name: build-and-track
+
+# Daily: check for a new upstream HAOS release; if found, build our unified
+# tri-vendor GPU/AI image and publish it as a GitHub Release. Also runnable on
+# demand (optionally forcing a build of a specific tag).
+on:
+  schedule:
+    - cron: "17 4 * * *"   # 04:17 UTC daily
+  workflow_dispatch:
+    inputs:
+      force_tag:
+        description: "Build this upstream tag even if we already released it"
+        required: false
+        default: ""
+      profile:
+        description: "Build profile: all | nvidia-amd (no Xe) | intel-amd (in-tree only, no NVIDIA - pipeline proof)"
+        required: false
+        default: "all"
+
+permissions:
+  contents: write   # create releases + tags
+
+env:
+  UPSTREAM_REPO: home-assistant/operating-system
+  # Pin the HAOS builder image, OR leave blank to build it from the submodule's
+  # own Dockerfile (guaranteed to match the pinned Buildroot toolchain).
+  # Confirm the current published tag from the upstream repo's CI if you pin.
+  BUILDER_IMAGE: ""
+  OTA_COMPATIBLE: haos-generic-x86-64-gpu-ai
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1. Decide whether there is new upstream work to build.
+  # ---------------------------------------------------------------------------
+  check-upstream:
+    runs-on: ubuntu-latest
+    outputs:
+      should_build: ${{ steps.decide.outputs.should_build }}
+      version: ${{ steps.decide.outputs.version }}
+    steps:
+      - name: Resolve latest upstream tag vs our latest release
+        id: decide
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          force="${{ github.event.inputs.force_tag }}"
+
+          if [ -n "$force" ]; then
+            up="$force"
+          else
+            up="$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" \
+              -H 'Accept: application/vnd.github+json' \
+              "https://api.github.com/repos/${UPSTREAM_REPO}/releases/latest" \
+              | sed -n 's/.*"tag_name":[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1)"
+          fi
+          echo "upstream tag: ${up:-<none>}"
+          [ -n "$up" ] || { echo "could not resolve upstream tag"; exit 1; }
+
+          # Our latest release tag (empty if none yet).
+          ours="$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" \
+            -H 'Accept: application/vnd.github+json' \
+            "https://api.github.com/repos/${{ github.repository }}/releases/latest" \
+            | sed -n 's/.*"tag_name":[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1 || true)"
+          echo "our latest release: ${ours:-<none>}"
+
+          if [ -n "$force" ] || [ "$up" != "$ours" ]; then
+            echo "should_build=true"  >> "$GITHUB_OUTPUT"
+          else
+            echo "should_build=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "version=${up}" >> "$GITHUB_OUTPUT"
+
+  # ---------------------------------------------------------------------------
+  # 2. Build the unified image + RAUC bundle and publish the release.
+  # ---------------------------------------------------------------------------
+  build:
+    needs: check-upstream
+    if: needs.check-upstream.outputs.should_build == 'true'
+    runs-on: ubuntu-latest   # NOTE: a full HAOS build is disk/time heavy; a
+                             # larger or self-hosted runner is strongly advised.
+    timeout-minutes: 350
+    env:
+      VERSION: ${{ needs.check-upstream.outputs.version }}
+      # inputs.profile is empty on the cron schedule -> default to the full image
+      PROFILE: ${{ github.event.inputs.profile || 'all' }}
+    steps:
+      - name: Free up runner disk space
+        run: |
+          set -euo pipefail
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+            /opt/hostedtoolcache/CodeQL /usr/local/share/boost || true
+          sudo docker image prune -af || true
+          df -h
+
+      - name: Checkout (with our tree)
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Initialise upstream submodule at the target tag
+        run: |
+          set -euo pipefail
+          git submodule sync --recursive
+          git -C upstream fetch --tags --depth 1 origin "refs/tags/${VERSION}:refs/tags/${VERSION}" || \
+          git submodule update --init --recursive --depth 1 upstream
+          git -C upstream checkout "tags/${VERSION}"
+          # Buildroot is a nested submodule of the operating-system repo.
+          git -C upstream submodule update --init --recursive --depth 1
+
+      - name: Preflight gate (kernel<->driver + assets) - hard fail
+        run: |
+          set -euo pipefail
+          chmod +x external/scripts/preflight-check.sh
+          STRICT=1 ./external/scripts/preflight-check.sh "${PROFILE}"
+
+      - name: Write RAUC signing material from secrets
+        env:
+          RAUC_CERT: ${{ secrets.RAUC_SIGNING_CERT }}
+          RAUC_KEY: ${{ secrets.RAUC_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          mkdir -p output
+          # HAOS's rauc.sh looks for cert.pem/key.pem in the build dir. The exact
+          # location differs by HAOS version (repo root vs. output root), so we
+          # place them in BOTH to be safe. Confirm against
+          # upstream/buildroot-external/scripts/rauc.sh for your pin.
+          printf '%s' "$RAUC_CERT" | tee cert.pem output/cert.pem >/dev/null
+          printf '%s' "$RAUC_KEY"  | tee key.pem  output/key.pem  >/dev/null
+          chmod 600 key.pem output/key.pem
+
+      - name: Determine builder image
+        id: builder
+        run: |
+          set -euo pipefail
+          if [ -n "${BUILDER_IMAGE}" ]; then
+            echo "image=${BUILDER_IMAGE}" >> "$GITHUB_OUTPUT"
+          else
+            echo "Building HAOS builder from the submodule's Dockerfile"
+            docker build -t haos-gpu-builder:local ./upstream
+            echo "image=haos-gpu-builder:local" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build unified GPU/AI image + bundle
+        run: |
+          set -euo pipefail
+          docker run --rm --privileged \
+            -v "${GITHUB_WORKSPACE}:/workspace" \
+            -w /workspace \
+            -e ota_compatible="${OTA_COMPATIBLE}" \
+            -e PROFILE="${PROFILE}" \
+            "${{ steps.builder.outputs.image }}" \
+            bash -c "set -euo pipefail; ./external/scripts/build.sh"
+
+      - name: Verify GPU artifacts are present
+        run: |
+          set -euo pipefail
+          TGT=output/target
+          IMG=output/images
+          echo "checking kernel modules baked into the rootfs..."
+          for ko in nvidia nvidia-uvm nvidia-modeset amdgpu i915; do
+            if ! find "$TGT/lib/modules" -name "${ko}.ko*" | grep -q .; then
+              echo "::error::missing kernel module ${ko}.ko"; exit 1
+            fi
+            echo "  ok: ${ko}.ko"
+          done
+          test -x "$TGT/usr/bin/nvidia-container-runtime" \
+            || echo "::warning::nvidia-container-runtime hook not found"
+          ls "$IMG"/*.raucb >/dev/null 2>&1 \
+            || { echo "::error::no .raucb produced"; exit 1; }
+          echo "artifacts:"; ls -lh "$IMG"
+
+      - name: Stage release assets
+        id: stage
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          IMG=output/images
+          cp "$IMG"/*.raucb release/ 2>/dev/null || true
+          # HAOS packs the raw disk image as .img.xz (name varies by board/ver).
+          cp "$IMG"/*.img.xz release/ 2>/dev/null || \
+          cp "$IMG"/haos_*.img.xz release/ 2>/dev/null || true
+          # Rewrite the OTA manifest placeholders and ship it too.
+          sed "s/__VERSION__/${VERSION}/g" ota/version-gpu-ai.json > release/version-gpu-ai.json
+          ls -lh release
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.VERSION }}
+          name: "HAOS GPU-AI Universal ${{ env.VERSION }}"
+          body: |
+            Unified tri-vendor (NVIDIA / Intel / AMD) GPU-AI HAOS build tracking
+            upstream `${{ env.UPSTREAM_REPO }}` tag `${{ env.VERSION }}`.
+
+            RAUC compatible: `${{ env.OTA_COMPATIBLE }}` (stock bundles rejected).
+            Install OTA on-device via the decoupled updater, or `rauc install`
+            the `.raucb` directly.
+          files: |
+            release/*.raucb
+            release/*.img.xz
+            release/version-gpu-ai.json
+          fail_on_unmatched_files: false

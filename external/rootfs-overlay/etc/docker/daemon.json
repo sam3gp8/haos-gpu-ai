@@ -1,0 +1,15 @@
+{
+    "log-driver": "journald",
+    "log-opts": {
+        "tag": "{{.Name}}"
+    },
+    "data-root": "/mnt/data/docker",
+    "bip": "172.30.232.1/23",
+    "default-runtime": "nvidia",
+    "runtimes": {
+        "nvidia": {
+            "path": "/usr/bin/nvidia-container-runtime",
+            "runtimeArgs": []
+        }
+    }
+}

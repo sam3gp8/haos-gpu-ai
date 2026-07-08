@@ -1,0 +1,30 @@
+menu "HAOS GPU/AI unified compute stack"
+
+config BR2_PACKAGE_HAOS_GPU_AI_ALL
+	bool "Enable unified tri-vendor GPU/AI compute stack"
+	default y
+	depends on BR2_x86_64
+	select BR2_PACKAGE_HAOS_COMPUTE_NVIDIA
+	select BR2_PACKAGE_HAOS_COMPUTE_INTEL
+	select BR2_PACKAGE_HAOS_COMPUTE_AMD
+	help
+	  Master switch for this external tree. When enabled (the default),
+	  all three vendor compute stacks are force-selected so that a single,
+	  hardware-agnostic image is produced.
+
+	  Only ONE stack is activated at runtime: gpu-autodetect inspects the
+	  PCI bus at boot and loads the modules for whichever vendor is actually
+	  present, then configures the Docker default runtime accordingly.
+
+	  Turn this off only if you want to hand-pick a subset of vendors below.
+
+if BR2_PACKAGE_HAOS_GPU_AI_ALL
+comment "NVIDIA + Intel + AMD stacks are force-enabled by BR2_PACKAGE_HAOS_GPU_AI_ALL"
+endif
+
+source "$BR2_EXTERNAL_HAOS_GPU_AI_PATH/package/haos-compute-nvidia/Config.in"
+source "$BR2_EXTERNAL_HAOS_GPU_AI_PATH/package/haos-nvidia-container-toolkit/Config.in"
+source "$BR2_EXTERNAL_HAOS_GPU_AI_PATH/package/haos-compute-intel/Config.in"
+source "$BR2_EXTERNAL_HAOS_GPU_AI_PATH/package/haos-compute-amd/Config.in"
+
+endmenu

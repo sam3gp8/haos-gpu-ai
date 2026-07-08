@@ -1,0 +1,28 @@
+config BR2_PACKAGE_HAOS_NVIDIA_CONTAINER_TOOLKIT
+	bool "NVIDIA Container Toolkit (runtime hook for GPU add-ons)"
+	default y if BR2_PACKAGE_HAOS_COMPUTE_NVIDIA
+	depends on BR2_x86_64
+	help
+	  Installs the NVIDIA Container Toolkit host components:
+
+	    nvidia-container-runtime      - OCI runtime shim referenced by daemon.json
+	    nvidia-container-runtime-hook - prestart hook that injects driver libs
+	    nvidia-container-cli          - libnvidia-container front-end
+	    nvidia-ctk                    - config/CDI generator
+	    libnvidia-container.so        - device + library injection library
+
+	  This is what lets an Ollama / vLLM add-on container see the host GPU at
+	  bare-metal speed without bundling the driver: the hook bind-mounts the
+	  host driver libraries and /dev nodes into the container namespace.
+
+if BR2_PACKAGE_HAOS_NVIDIA_CONTAINER_TOOLKIT
+
+config BR2_PACKAGE_HAOS_NVIDIA_CONTAINER_TOOLKIT_VERSION
+	string "NVIDIA Container Toolkit version"
+	default "1.19.1"
+	help
+	  Release version pulled from github.com/NVIDIA/nvidia-container-toolkit.
+	  Confirm the asset name for the version you pin (see the .mk); NVIDIA has
+	  changed release artifact layout between minor versions.
+
+endif

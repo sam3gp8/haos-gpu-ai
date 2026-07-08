@@ -1,0 +1,21 @@
+config BR2_PACKAGE_HAOS_COMPUTE_INTEL
+	bool "Intel GPU/XPU compute host contract (i915/xe + firmware + dri nodes)"
+	default y if BR2_PACKAGE_HAOS_GPU_AI_ALL
+	depends on BR2_x86_64
+	select BR2_PACKAGE_LINUX_FIRMWARE
+	help
+	  Establishes the HOST side of Intel GPU compute:
+
+	    * i915 / xe kernel drivers   (enabled via the kernel fragment)
+	    * Intel GuC/HuC + DMC firmware (from linux-firmware)
+	    * /dev/dri/renderD* nodes with the correct permissions (udev overlay)
+
+	  It deliberately does NOT compile intel-compute-runtime (NEO), the Intel
+	  Graphics Compiler (IGC), gmmlib, or level-zero into the base OS. That
+	  stack (a) is impractical to cross-compile in Buildroot - IGC alone drags
+	  in LLVM/Clang/SPIRV - and (b) does not belong in an immutable appliance
+	  rootfs. The Level-Zero / oneAPI / NEO runtime ships in the add-on
+	  container (Intel publishes oneAPI base images), talking to the kernel
+	  driver through the /dev/dri render node this contract guarantees.
+
+	  See NOTES.md in this package directory for the container-side recipe.

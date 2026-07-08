@@ -1,0 +1,2 @@
+name: HAOS_GPU_AI
+desc: Unified tri-vendor (NVIDIA / Intel / AMD) GPU + AI compute overlay for Home Assistant OS

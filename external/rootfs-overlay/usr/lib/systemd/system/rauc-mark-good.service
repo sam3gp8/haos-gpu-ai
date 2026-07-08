@@ -1,0 +1,17 @@
+[Unit]
+Description=Mark current RAUC slot good (reset grub A/B try counter, escape rescue loop)
+# Run early - after the basic system + the writable boot partition are up, but
+# BEFORE the network wait, so a networkless boot still marks the slot good and
+# cannot strand the machine in the rescue shell.
+After=basic.target
+RequiresMountsFor=/mnt/boot
+ConditionPathExists=/usr/bin/haos-gpu-mark-good.sh
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# '-' prefix: a failure here must never itself wedge the boot.
+ExecStart=-/usr/bin/haos-gpu-mark-good.sh
+
+[Install]
+WantedBy=multi-user.target

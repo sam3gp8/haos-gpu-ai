@@ -1,0 +1,26 @@
+# =============================================================================
+# HAOS GPU/AI unified overlay - ADDITIVE defconfig fragment
+# =============================================================================
+# This file contains ONLY additive (single-assignment) Kconfig symbols.
+#
+# The space-separated, multi-value variables that HAOS already sets upstream
+#   - BR2_LINUX_KERNEL_CONFIG_FRAGMENT_FILES
+#   - BR2_ROOTFS_OVERLAY
+#   - BR2_GLOBAL_PATCH_DIR
+#   - BR2_ROOTFS_POST_BUILD_SCRIPT
+# must NOT be re-assigned here (a bare re-assignment in a merged defconfig wins
+# last and would silently drop the upstream values). They are appended in place
+# by external/scripts/merge-defconfig.sh instead.
+# =============================================================================
+
+# Master switch -> force-selects NVIDIA + Intel + AMD (see external/Config.in)
+BR2_PACKAGE_HAOS_GPU_AI_ALL=y
+
+# The unified image is hardware-agnostic, so ship the complete firmware set
+# (Intel GuC/HuC, amdgpu, etc.). Selected explicitly here as well as by the
+# vendor packages so it survives even if a vendor package is toggled off.
+BR2_PACKAGE_LINUX_FIRMWARE=y
+
+# glibc utilities: installs ldconfig, which nvidia-container-toolkit >=1.17
+# REQUIRES on the host (it bind-mounts the host ldconfig into GPU containers).
+BR2_PACKAGE_GLIBC_UTILS=y

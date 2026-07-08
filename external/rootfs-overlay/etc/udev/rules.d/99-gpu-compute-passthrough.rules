@@ -1,0 +1,34 @@
+# =============================================================================
+# GPU compute passthrough - device node permissions
+#
+# These rules fire when the corresponding device node APPEARS (i.e. when the
+# matching driver has bound real hardware). On a host without a given vendor's
+# GPU the node never appears and the rule is simply never triggered - so a
+# single image is safe to boot on any of the three vendors.
+#
+# 0666 is intentionally permissive so unprivileged add-on containers can open
+# the compute nodes without per-container group plumbing. This is a homelab
+# appliance trade-off; tighten to a group + `TAG+="uaccess"` if you prefer.
+# =============================================================================
+
+# --- DRM render + card nodes (Intel, AMD, and NVIDIA's DRM node) ---
+SUBSYSTEM=="drm", KERNEL=="card[0-9]*",    MODE="0666"
+SUBSYSTEM=="drm", KERNEL=="renderD[0-9]*", MODE="0666"
+
+# --- AMD KFD compute interface (ROCm/HIP) ---
+KERNEL=="kfd", MODE="0666"
+
+# --- NVIDIA character devices ---
+KERNEL=="nvidia",            MODE="0666"
+KERNEL=="nvidia[0-9]*",      MODE="0666"
+KERNEL=="nvidiactl",         MODE="0666"
+KERNEL=="nvidia-modeset",    MODE="0666"
+# nvidia-uvm / nvidia-uvm-tools are critical for LLM VRAM paging (Unified Memory)
+KERNEL=="nvidia-uvm",        MODE="0666"
+KERNEL=="nvidia-uvm-tools",  MODE="0666"
+
+# The nvidia-uvm major/minor is allocated dynamically; when the module loads,
+# (re)create the control + uvm nodes via nvidia-modprobe so they exist even
+# before first CUDA use inside a container.
+ACTION=="add", KERNEL=="nvidia_uvm", RUN+="/usr/bin/nvidia-modprobe -c 0 -u"
+ACTION=="add", DEVPATH=="/module/nvidia", SUBSYSTEM=="module", RUN+="/usr/bin/nvidia-modprobe -c 0"

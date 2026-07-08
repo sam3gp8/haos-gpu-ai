@@ -1,0 +1,22 @@
+# =============================================================================
+# HAOS GPU/AI - ADDITIVE fragment for the 'intel-amd' pipeline-validation profile
+# =============================================================================
+# In-tree drivers ONLY: i915 + Xe (Intel) and amdgpu (AMD). NO NVIDIA
+# out-of-tree module build. Because nothing here compiles against the kernel
+# out-of-tree, this profile is near-certain to build on ANY HAOS kernel -
+# including bleeding-edge ones like 6.18 where the NVIDIA driver may not yet
+# have support.
+#
+# Use it to validate the ENTIRE pipeline end to end - external-tree chaining,
+# RAUC signing with your CA, image assembly, the CI workflow, and on-device OTA
+# - before spending build cycles on the NVIDIA driver against a new kernel.
+# Uses the full kernel fragment (kernel/gpu-ai.config), so Xe is included.
+# =============================================================================
+
+# Master switch off + NVIDIA off; enable only the two in-tree vendors.
+# BR2_PACKAGE_HAOS_GPU_AI_ALL is not set
+# BR2_PACKAGE_HAOS_COMPUTE_NVIDIA is not set
+BR2_PACKAGE_HAOS_COMPUTE_INTEL=y
+BR2_PACKAGE_HAOS_COMPUTE_AMD=y
+
+BR2_PACKAGE_LINUX_FIRMWARE=y

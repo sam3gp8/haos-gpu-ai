@@ -1,0 +1,19 @@
+config BR2_PACKAGE_HAOS_COMPUTE_AMD
+	bool "AMD GPU compute host contract (amdgpu + KFD + firmware + dri/kfd nodes)"
+	default y if BR2_PACKAGE_HAOS_GPU_AI_ALL
+	depends on BR2_x86_64
+	select BR2_PACKAGE_LINUX_FIRMWARE
+	help
+	  Establishes the HOST side of AMD GPU compute:
+
+	    * amdgpu kernel driver         (enabled via the kernel fragment)
+	    * KFD compute interface        (CONFIG_HSA_AMD -> /dev/kfd)
+	    * Radeon/Instinct firmware     (from linux-firmware, amdgpu/*)
+	    * /dev/dri/* + /dev/kfd nodes  (udev overlay)
+
+	  It deliberately does NOT compile the ROCm/HIP user-space stack (rocBLAS,
+	  hipBLAS, the HIP runtime, ROCr) into the base OS. ROCm is enormous and
+	  does not build in Buildroot; more importantly it belongs in the add-on
+	  container. Ollama's ROCm image (and vLLM's ROCm image) bundle the whole
+	  runtime and talk to the kernel through the /dev/kfd + /dev/dri nodes this
+	  contract guarantees. See NOTES.md.
