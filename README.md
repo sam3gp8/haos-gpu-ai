@@ -217,7 +217,7 @@ xz -dc output/images/haos_generic-x86-64-*.img.xz | sudo dd of=/dev/sdX bs=4M st
 
 ## Update an existing GPU-AI install
 
-- **Automatic:** the daily timer installs new releases from your fork.
+- **Automatic:** the daily timer installs new releases from this fork.
 - **Manual:** `rauc install haos_generic-x86-64-<ver>.raucb && reboot`
 
 ## GPU-accelerated add-on
@@ -279,6 +279,3 @@ the property of their respective projects; this repo is an external overlay and
 does not redistribute their source (the `upstream/` submodule points at the
 official Home Assistant OS repository).
 
-> ⚠️ **Never commit `pki/`** — it holds your private OTA signing key. It's in
-> `.gitignore`; keep it that way. If it leaks, anyone can sign updates your
-> devices will trust.
