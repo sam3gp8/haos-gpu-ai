@@ -1,16 +1,34 @@
-# Build output
+# Build output (generated - large)
 /output/
 /release/
+
+# Buildroot download cache (multi-GB: kernel tarball, NVIDIA .run, etc.)
+/dl/
 
 # Generated defconfig (produced by merge-defconfig.sh from the fragment)
 /external/configs/generic_x86_64_gpu_ai_defconfig
 
-# RAUC signing material - NEVER commit the private key
+# ==========================================================================
+# RAUC signing material - NEVER COMMIT THE PRIVATE KEY.
+# pki/key.pem is the identity your whole OTA lock depends on. If it leaks,
+# anyone can sign updates your devices will trust. Keep it OFF GitHub.
+# ==========================================================================
 /pki/
 key.pem
 cert.pem
 *.pem
+*.key
+
+# Patched builder Dockerfile variants (machine-specific, regenerate locally)
+upstream/Dockerfile.nodind
+
+# Stray dd/loop artifacts
+/TARGET
+*.img
+*.img.xz
+*.raucb
 
 # Editor / OS cruft
 *.swp
+*~
 .DS_Store

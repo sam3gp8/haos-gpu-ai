@@ -1,16 +1,43 @@
-# HAOS GPU-AI Universal
+<div align="center">
+
+# 🏠🤖 HAOS GPU-AI Universal
+
+**A from-scratch, tri-vendor GPU-accelerated fork of Home Assistant OS — run local LLMs on bare-metal GPU speed, inside a Home Assistant add-on.**
+
+[![Platform](https://img.shields.io/badge/platform-x86__64%20bare--metal-blue)](#)
+[![HAOS](https://img.shields.io/badge/HAOS-17.3%20(kernel%206.12)-41BDF5)](#)
+[![GPUs](https://img.shields.io/badge/GPU-NVIDIA%20%2B%20Intel%20%2B%20AMD-76B900)](#)
+[![OTA](https://img.shields.io/badge/OTA-CA--signed%20%2F%20decoupled-success)](#)
+[![Status](https://img.shields.io/badge/status-hardware--proven-brightgreen)](#)
+[![License](https://img.shields.io/badge/license-MIT-lightgrey)](LICENSE)
+
+<a href="https://www.buymeacoffee.com/sam3gp8" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" height="46" width="163"></a>
+
+</div>
+
+---
 
 A Buildroot **external-tree** overlay that turns Home Assistant OS into a
 bare-metal, tri-vendor GPU host for local LLM/AI add-ons. A single unified
 x86-64 image ships driver support for **NVIDIA + Intel + AMD**; the correct
-stack is activated at boot from the PCI bus. Upstream HAOS releases are tracked
-daily and rebuilt into signed, decoupled OTA bundles.
+stack is activated at boot from the PCI bus. Upstream HAOS releases can be
+tracked and rebuilt into **signed, decoupled OTA bundles** that the Supervisor
+cannot overwrite.
 
 The submodule under `upstream/` is **never modified** — everything is injected
-through this external tree, the rootfs overlay, patches, and a merged defconfig.
+through this external tree, the rootfs overlay, build-time patches, and a merged
+defconfig.
 
-> **New here? Follow [`SETUP.md`](SETUP.md)** for the exact step-by-step: build
-> the OS locally (Phase 1), then wire up GitHub CI + Releases + OTA (Phase 2).
+> ### ✅ Proven end-to-end on real hardware
+> This isn't theoretical. On an RTX 4090 the built image was validated all the way through:
+> - Host `nvidia-smi` → driver **595.84**, CUDA **13.2**, 24 GB VRAM
+> - A stock `ubuntu` container running `nvidia-smi` → the 4090 injected into the container namespace
+> - The bundled **Ollama add-on** loading a **26B-parameter model** into VRAM (`llama-server` holding ~18.5 GB) and answering as the smart-home's Assist conversation agent
+> - A **stock HAOS OTA bundle rejected** by RAUC (compatible-string + keyring mismatch) — the update-lock demonstrated live
+
+> **New here? Follow [`SETUP.md`](SETUP.md)** for the exact step-by-step build,
+> including the real-world gotchas (kernel/driver pre-seeding, builder network,
+> and the `FORCE_UNSAFE_CONFIGURE` / dind notes for a fresh machine).
 
 ---
 
@@ -201,23 +228,57 @@ API on `:11434`.
 
 ---
 
-## Honest caveats
+## Status & caveats
 
-This is a **correct, production-oriented scaffold**, not a guaranteed
-first-try build. The parts inherent to out-of-tree GPU work that will need
-version-pinning iteration against your specific HAOS kernel:
+This has been **built and hardware-validated end to end** (see the callout at
+the top). The following were the hard problems along the way — all resolved in
+this repo, but worth knowing if you re-pin to a different HAOS/kernel version,
+because they're where version drift bites:
 
-- **NVIDIA module build flags** vs. the exact pinned kernel (the open-modules
-  `make` invocation is right in shape; specific flags can shift by kernel).
-- **NVIDIA Container Toolkit asset name** — verify the release artifact name for
-  the version you pin (flagged in the `.mk`).
-- **`ota_compatible` env var name** and **`rauc.sh` cert path** — confirm both
-  against your pinned `upstream/buildroot-external/` (the RAUC key location has
-  moved between HAOS versions; the CI writes it to two places to be safe).
-- **`CONFIG_DRM_XE`** availability depends on the pinned kernel; drop it if the
-  build reports it unknown (i915 still provides `/dev/dri`).
-- **CI runner limits** — a full HAOS build is disk/time-heavy; a larger or
-  self-hosted runner is strongly advised.
+- **NVIDIA driver ↔ kernel pairing** — pinned to **595.84** for kernel **6.12.85**
+  (open modules, Turing+/Ada; covers the RTX 4090). A newer kernel needs a newer
+  driver + CUDA pairing.
+- **GSP firmware path** — the open modules require `gsp_ga10x.bin` under
+  `/usr/lib/firmware/nvidia/<ver>/` (merged-usr path — *not* `/lib/firmware`).
+- **NVIDIA Container Toolkit** ships as a `.deb` (extracted via `dpkg-deb`); its
+  `config.toml` must point `ldconfig` at a **host** binary (toolkit ≥1.17
+  bind-mounts the host ldconfig into containers), which HAOS doesn't ship by
+  default — so the image installs one.
+- **Docker storage** — HAOS preloads its data partition in **containerd-snapshotter**
+  format; the shipped `daemon.json` must match stock (no pinned `storage-driver`)
+  or dockerd rejects the store and the Supervisor never starts.
+- **`/etc/docker` is read-only** on HAOS, so `"default-runtime": "nvidia"` is
+  **baked into `daemon.json`** at build time (it's a no-op on non-NVIDIA hosts —
+  the runtime hook only fires when a container sets `NVIDIA_VISIBLE_DEVICES`).
+- **A/B boot-good** — a `rauc-mark-good` service resets the grub try-counter each
+  boot so a networkless/slow first boot can't strand the box in the rescue shell.
+- **OTA decoupling** — the custom `compatible` string is applied at every
+  `hassos_rauc_compatible` call site, and the RAUC keyring is baked from **your**
+  CA so stock bundles are rejected before install.
+- **`CONFIG_DRM_XE`** depends on the pinned kernel; drop the two `DRM_XE` lines
+  from `external/kernel/gpu-ai.config` if a build reports it unknown (i915 still
+  provides `/dev/dri`).
 
 The structure, the layering, the RAUC/OTA safety model, and the host/container
-split are the durable parts; the vendor packages are where you'll iterate.
+split are the durable parts; the vendor package versions are where you'll iterate.
+
+---
+
+## 💛 Support
+
+If this saved you a week of Buildroot archaeology, you can buy me a coffee:
+
+<a href="https://www.buymeacoffee.com/sam3gp8" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" height="46" width="163"></a>
+
+→ **https://www.buymeacoffee.com/sam3gp8**
+
+## License
+
+Released under the [MIT License](LICENSE). Home Assistant OS and Buildroot are
+the property of their respective projects; this repo is an external overlay and
+does not redistribute their source (the `upstream/` submodule points at the
+official Home Assistant OS repository).
+
+> ⚠️ **Never commit `pki/`** — it holds your private OTA signing key. It's in
+> `.gitignore`; keep it that way. If it leaks, anyone can sign updates your
+> devices will trust.

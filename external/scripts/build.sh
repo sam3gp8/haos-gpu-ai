@@ -48,6 +48,21 @@ if [ -f "$HDD_IMAGE_SH" ] && grep -q '^SYSTEM_SIZE=256M$' "$HDD_IMAGE_SH"; then
 	echo ">>> bumped system partition SYSTEM_SIZE 256M -> 512M (fits GPU rootfs)"
 fi
 
+# --- skip docker-in-docker image preload (builder has no docker daemon) -------
+# HAOS's create-data-partition.sh uses docker-in-docker to PRELOAD Supervisor
+# images into the data partition at build time. Our builder has no docker daemon
+# (docker-ce was stripped; it couldn't reach download.docker.com), so those lines
+# fail "docker: command not found". The preload is an OPTIMISATION, not required:
+# a network-connected HAOS pulls Core + Supervisor on first boot (hardware-proven).
+# Comment the whole `container=$(docker run ...)` .. `docker exec` block via a
+# ROBUST line-range match, preserving the containerd-snapshotter marker and the
+# AppArmor setup that follow. Idempotent; submodule commit stays clean.
+CDP_SH="${UPSTREAM}/buildroot-external/package/hassio/create-data-partition.sh"
+if [ -f "$CDP_SH" ] && ! grep -q '#GPU_AI-SKIP' "$CDP_SH"; then
+	sed -i '/^container=$(docker run/,/^docker exec "${container}"/ s/^/#GPU_AI-SKIP /' "$CDP_SH"
+	echo ">>> GPU_AI: patched create-data-partition.sh (skipped docker preload block)"
+fi
+
 "${EXT}/scripts/merge-defconfig.sh" "$PROFILE"
 
 # 2. DELIVERABLE E (a): custom RAUC `compatible` string.
@@ -84,6 +99,21 @@ for d in "${ROOT}/pki" "${ROOT}"; do
 		break
 	fi
 done
+# 2c. DELIVERABLE E (strict): keyring trusts ONLY your CA (not HAOS dev/rel).
+#     Stock HAOS keeps its dev-ca/rel-ca in the keyring AND appends yours, so the
+#     device would trust HAOS-signed bundles too (the compatible-string mismatch
+#     still blocks stock updates, so this is belt-and-suspenders). For a hard
+#     lock, rewrite rauc.sh's keyring copy to emit YOUR cert as the sole trust
+#     anchor. To keep HAOS's default behaviour instead, delete this block.
+RAUC_SH="${UPSTREAM}/buildroot-external/scripts/rauc.sh"
+if [ -f "$RAUC_SH" ] && ! grep -q 'GPU_AI: keyring = your CA only' "$RAUC_SH"; then
+	sed -i \
+		-e 's|cp "${BR2_EXTERNAL_HASSOS_PATH}/ota/dev-ca.pem" "${TARGET_DIR}/etc/rauc/keyring.pem"|openssl x509 -in /build/cert.pem -text > "${TARGET_DIR}/etc/rauc/keyring.pem"  # GPU_AI: keyring = your CA only|' \
+		-e 's|cp "${BR2_EXTERNAL_HASSOS_PATH}/ota/rel-ca.pem" "${TARGET_DIR}/etc/rauc/keyring.pem"|openssl x509 -in /build/cert.pem -text > "${TARGET_DIR}/etc/rauc/keyring.pem"  # GPU_AI: keyring = your CA only|' \
+		"$RAUC_SH"
+	echo ">>> E: keyring hardened to YOUR CA only (strict decoupling)"
+fi
+
 if [ "${GPU_AI_CA_STAGED}" -ne 1 ]; then
 	echo ">>> E WARNING: no pki/{cert,key}.pem found - a THROWAWAY self-signed key"
 	echo ">>>            will be used and OTA decoupling is NOT secured."

@@ -197,3 +197,78 @@ Releases.
 - **RAUC signing path** — if the build ignores your `cert.pem`/`key.pem`, confirm
   where `upstream/buildroot-external/scripts/rauc.sh` expects them for your pin
   and copy accordingly (we stage both repo-root and `output/` to cover both).
+
+---
+
+## Appendix: real-world build gotchas (a fresh machine will hit these)
+
+These were all encountered bootstrapping a build on a clean workstation. None
+are bugs in the tree; they're environment issues with known fixes.
+
+### Pre-seed the assets that don't auto-fetch
+Buildroot can't reliably fetch the kernel or the NVIDIA `.run` in a sandboxed
+builder. Seed them into `dl/` from the **host** (which has network) before building:
+```bash
+mkdir -p dl/linux dl/linux-headers dl/cmake
+curl -fL -o dl/linux/linux-6.12.85.tar.xz https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.12.85.tar.xz
+cp dl/linux/linux-6.12.85.tar.xz dl/linux-headers/
+curl -fL -o dl/NVIDIA-Linux-x86_64-595.84.run https://us.download.nvidia.com/XFree86/Linux-x86_64/595.84/NVIDIA-Linux-x86_64-595.84.run
+```
+
+### The builder image needs network + CA certs + docker.io
+HAOS's `upstream/Dockerfile` installs `docker-ce` from `download.docker.com`,
+which is often blocked. Build a patched variant that (a) drops the docker-ce
+apt block, (b) keeps `ca-certificates` (TLS) and adds `docker.io` +
+`curl` to the build-tools layer:
+```bash
+# strip the docker-ce block, keep the toolchain
+awk '/^# Docker$/{skip=1;next} skip&&/^# Build tools$/{skip=0} !skip' \
+    upstream/Dockerfile > upstream/Dockerfile.nodind
+# add ca-certificates, docker.io, curl to the build-tools apt list, then:
+docker build -t haos-gpu-builder -f upstream/Dockerfile.nodind upstream
+```
+
+### Docker daemon on the host can't reach the internet from containers
+Symptom: `wget` inside the builder says "Network is unreachable" though the host
+is fine. Fixes, in order:
+```bash
+sudo sysctl -w net.ipv4.ip_forward=1   # most common cause on a fresh Docker install
+echo 'net.ipv4.ip_forward=1' | sudo tee /etc/sysctl.d/99-docker.conf   # persist
+```
+Then run the build container with `--network=host`.
+
+### Buildroot won't run as root without a flag
+The builder runs as root; GNU tar/others refuse to `configure` as root. Pass:
+```bash
+docker run ... -e BR2_DL_DIR=/workspace/dl \
+  haos-gpu-builder bash -c 'export FORCE_UNSAFE_CONFIGURE=1 BR2_DL_DIR=/workspace/dl; \
+    STRICT=0 PROFILE=all ./external/scripts/build.sh'
+```
+
+### No docker daemon *inside* the builder → data-partition preload fails
+`create-data-partition.sh` uses docker-in-docker to preload Supervisor images.
+`build.sh` already patches this out at build time (the images are pulled on
+first boot instead — proven fine on a network-connected box). If you see
+`docker: command not found` from that script, confirm the patch fired
+(`grep GPU_AI-SKIP upstream/buildroot-external/package/hassio/create-data-partition.sh`).
+
+### Cleaning the build
+Only two safe states: touch nothing, or remove **all** of `output/`. A partial
+clean (e.g. `rm -rf output/target` while leaving `output/build`) breaks the
+skeleton package. To force a clean rebuild:
+```bash
+sudo umount output/target/* output/images/* 2>/dev/null
+sudo rm -rf output
+```
+The `dl/` cache is preserved, so nothing re-downloads.
+
+### First boot: Secure Boot
+A self-built HAOS image is not signed by Microsoft's shim CA. If the machine's
+UEFI throws `error: shim_lock protocol not found`, **disable Secure Boot** (and
+CSM/Legacy) in the BIOS. For a 24 GB GPU also enable **Above 4G Decoding** and
+**Resizable BAR**.
+
+### First boot: be patient, and don't touch Docker
+First boot resizes the data partition and the Supervisor pulls HA Core over the
+network (5–15 min, longer on USB). The banner shows `Core: landingpage` until
+it's done. **Do not restart Docker during this window** — it interrupts the pull.

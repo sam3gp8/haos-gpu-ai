@@ -74,6 +74,27 @@ define HAOS_COMPUTE_NVIDIA_INSTALL_TARGET_CMDS
 	ln -sf libnvidia-ml.so.$(HAOS_COMPUTE_NVIDIA_V) $(TARGET_DIR)/usr/lib/libnvidia-ml.so.1
 	ln -sf libnvidia-ml.so.1 $(TARGET_DIR)/usr/lib/libnvidia-ml.so
 
+	# --- PTX JIT compiler + JIT companions (REQUIRED at model load) ----------
+	# CONFIRMED on hardware: with this absent, llama-server's cuda runner aborts
+	# at warmup: "CUDA error: PTX JIT compiler library not found" (CUDA err 221),
+	# terminating with HTTP 500. libcuda routes runtime PTX->SASS JIT through
+	# libnvidia-ptxjitcompiler; on 5xx-era drivers the JIT path can also pull in
+	# NVVM / gpucomp / the memory allocator lib. Install ptxjitcompiler (Tier-1,
+	# named by the error) plus any of those companions that EXIST in the 595.84
+	# payload (Tier-2, glob-guarded so a missing name can't fail the build).
+	# Each real .so.<ver> gets its .so.1 + .so symlinks so the loader resolves it.
+	for base in libnvidia-ptxjitcompiler libnvidia-nvvm libnvidia-gpucomp libnvidia-allocator; do \
+		f="$(HAOS_COMPUTE_NVIDIA_PAYLOAD)/$$base.so.$(HAOS_COMPUTE_NVIDIA_V)"; \
+		if [ -e "$$f" ]; then \
+			$(INSTALL) -D -m 0755 "$$f" $(TARGET_DIR)/usr/lib/$$base.so.$(HAOS_COMPUTE_NVIDIA_V); \
+			ln -sf $$base.so.$(HAOS_COMPUTE_NVIDIA_V) $(TARGET_DIR)/usr/lib/$$base.so.1; \
+			ln -sf $$base.so.1 $(TARGET_DIR)/usr/lib/$$base.so; \
+			echo "[nvidia] installed JIT lib: $$base.so.$(HAOS_COMPUTE_NVIDIA_V)"; \
+		else \
+			echo "[nvidia] JIT lib not in payload (skipping): $$base"; \
+		fi; \
+	done
+
 
 	# --- helpers ---
 	# nvidia-modprobe must be setuid root: it creates /dev/nvidia* + /dev/nvidia-uvm

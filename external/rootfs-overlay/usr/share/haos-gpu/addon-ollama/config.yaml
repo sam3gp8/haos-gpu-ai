@@ -37,6 +37,14 @@ environment:
   NVIDIA_VISIBLE_DEVICES: "all"
   NVIDIA_DRIVER_CAPABILITIES: "compute,utility"
   OLLAMA_HOST: "0.0.0.0"
+  # Flash attention: required for KV-cache quantization to be legal (without it,
+  # a q8_0 KV cache makes llama-server segfault: "V cache quantization requires
+  # flash_attn"). It's also faster and lower-VRAM on Turing+/Ada (your 4090).
+  OLLAMA_FLASH_ATTENTION: "1"
+  # KV-cache type: left at the f16 default here. With flash attention ON (above)
+  # you may set this to "q8_0" to roughly halve KV-cache VRAM and fit larger
+  # models / longer context on 24 GB — safe now that flash attention is enabled.
+  # OLLAMA_KV_CACHE_TYPE: "q8_0"
 
 # --- Vendor-specific alternative (instead of full_access) -------------------
 # devices:
