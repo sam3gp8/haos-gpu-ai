@@ -22,6 +22,13 @@ permissions:
 
 env:
   UPSTREAM_REPO: home-assistant/operating-system
+  # Only AUTO-build tags on this upstream line. A major bump (17.x -> 18.x)
+  # changes the kernel (6.12.85 -> 6.18.37), which invalidates the NVIDIA
+  # driver pairing and every version-sensitive patch (GSP path, rauc.sh call
+  # sites, create-data-partition, daemon.json). That must be a deliberate,
+  # re-validated bump run manually with force_tag - never an unattended cron
+  # build. Set to "" to track any release.
+  TRACK_LINE: "17."
   # Pin the HAOS builder image, OR leave blank to build it from the submodule's
   # own Dockerfile (guaranteed to match the pinned Buildroot toolchain).
   # Confirm the current published tag from the upstream repo's CI if you pin.
@@ -56,6 +63,17 @@ jobs:
           fi
           echo "upstream tag: ${up:-<none>}"
           [ -n "$up" ] || { echo "could not resolve upstream tag"; exit 1; }
+
+          # Major-line guard: never auto-build across a kernel-changing bump.
+          if [ -z "$force" ] && [ -n "${TRACK_LINE:-}" ] && [ "${up#$TRACK_LINE}" = "$up" ]; then
+            echo "::notice::upstream ${up} is outside the tracked ${TRACK_LINE}x line - not auto-building."
+            echo "  A major bump changes the kernel and needs the NVIDIA driver pin +"
+            echo "  version-sensitive patches re-validated. When ready, run this workflow"
+            echo "  manually with force_tag=${up}."
+            echo "should_build=false" >> "$GITHUB_OUTPUT"
+            echo "version=${up}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
 
           # Our latest release tag (empty if none yet).
           ours="$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" \
@@ -102,10 +120,25 @@ jobs:
         run: |
           set -euo pipefail
           git submodule sync --recursive
-          git -C upstream fetch --tags --depth 1 origin "refs/tags/${VERSION}:refs/tags/${VERSION}" || \
-          git submodule update --init --recursive --depth 1 upstream
+
+          # ORDER MATTERS (this bit them once, see below).
+          # 1. Init the submodule FIRST, at its pinned gitlink. Until upstream/
+          #    contains a .git, `git -C upstream ...` walks UP and silently
+          #    operates on the PARENT repo - so fetching refs/tags/<VERSION>
+          #    asked *our* repo for a HAOS tag and died with
+          #    "fatal: couldn't find remote ref refs/tags/<VERSION>".
+          git submodule update --init --depth 1 upstream
+
+          # 2. NOW fetch the target tag into the submodule. A --depth 1 submodule
+          #    clone carries no tags, which is why a later checkout failed with
+          #    "error: pathspec 'tags/<VERSION>' did not match any file(s)".
+          git -C upstream fetch --depth 1 origin \
+            "refs/tags/${VERSION}:refs/tags/${VERSION}"
           git -C upstream checkout "tags/${VERSION}"
-          # Buildroot is a nested submodule of the operating-system repo.
+          git -C upstream describe --tags || true
+
+          # 3. Buildroot is a nested submodule; init it AFTER the checkout so we
+          #    get the buildroot commit that THIS HAOS tag pins, not the old one.
           git -C upstream submodule update --init --recursive --depth 1
 
       - name: Preflight gate (kernel<->driver + assets) - hard fail
