@@ -42,9 +42,11 @@ grep BR2_LINUX_KERNEL_CUSTOM_VERSION_VALUE \
 ```
 The pinned NVIDIA driver must support that kernel. Reference points (verify on
 NVIDIA's Unix driver page): 550 tops out ~6.11; 580.126.18 fixes the 6.19
-module build; 595.84 is the current Production Branch. **HAOS 18.1 ships kernel
-6.18.37, so the pin is 595.84** (already the default). Only change it if your
-kernel differs:
+module build; 595.84 is the current Production Branch. **The device-verified
+build is HAOS 17.3 (kernel 6.12.85), and the pin is 595.84** (already the
+default; it also covers the 6.18.37 kernel of a future 18.1 bump, which is
+currently blocked because that kernel tarball 404s on the kernel.org CDN).
+Only change the pin if your kernel differs:
 ```
 # external/package/haos-compute-nvidia/Config.in
 #   default "595.84"
