@@ -13,7 +13,7 @@
 # =============================================================================
 set -euo pipefail
 
-REPO="${HAOS_GPU_UPDATE_REPO:-your-org/haos-gpu-ai}"
+REPO="${HAOS_GPU_UPDATE_REPO:-sam3gp8/haos-gpu-ai}"
 API="https://api.github.com/repos/${REPO}/releases/latest"
 
 log() { echo "[haos-gpu-updater] $*"; }

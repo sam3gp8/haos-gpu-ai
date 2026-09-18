@@ -4,7 +4,7 @@ slug: ollama_gpu_ai
 description: >-
   Ollama LLM server with universal GPU acceleration (NVIDIA / Intel / AMD),
   built for the HAOS GPU-AI host. Serves local models to Home Assistant.
-url: "https://github.com/your-org/haos-gpu-ai"
+url: "https://github.com/sam3gp8/haos-gpu-ai"
 arch:
   - amd64
 init: false

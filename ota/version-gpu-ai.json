@@ -3,6 +3,6 @@
   "compatible": "haos-generic-x86-64-gpu-ai",
   "generic-x86-64": {
     "version": "__VERSION__",
-    "bundle": "https://github.com/your-org/haos-gpu-ai/releases/download/__VERSION__/haos_generic-x86-64-__VERSION__.raucb"
+    "bundle": "https://github.com/sam3gp8/haos-gpu-ai/releases/download/__VERSION__/haos_generic-x86-64-__VERSION__.raucb"
   }
 }

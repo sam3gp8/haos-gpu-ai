@@ -154,7 +154,7 @@ haos-gpu-ai/
 ## Build
 
 ```bash
-git clone --recurse-submodules https://github.com/your-org/haos-gpu-ai.git
+git clone --recurse-submodules https://github.com/sam3gp8/haos-gpu-ai.git
 cd haos-gpu-ai
 
 # one-time: create the signing CA
