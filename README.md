@@ -80,10 +80,14 @@ universal-image goal. What this repo actually does, and why:
    They are not in the driver `.run`; they ship in the container. The host
    installs only what the driver payload provides.
 
-3. **`default-runtime: nvidia` breaks non-NVIDIA hosts.** It forces every
-   container through the NVIDIA hook, which fails when there's no NVIDIA GPU. So
-   the shipped `daemon.json` keeps `runc` as default and `gpu-autodetect`
-   promotes NVIDIA to default-runtime **only when an NVIDIA GPU is detected**.
+3. **`default-runtime: nvidia` is baked in — and safe on non-NVIDIA hosts.**
+   `/etc/docker` is part of the read-only rootfs, so `daemon.json` can't be
+   rewritten at boot; a runtime switch is structurally impossible. The naive
+   worry is that a baked `nvidia` default breaks Intel/AMD boxes, but the nvidia
+   runtime is a `runc` shim whose hook **no-ops unless a container sets
+   `NVIDIA_VISIBLE_DEVICES`** — so Supervisor, Core, and every ordinary add-on
+   run untouched on any vendor. `gpu-autodetect` therefore only loads the right
+   kernel modules; it does **not** (and can't) edit `daemon.json`.
 
 4. **The version suffix is cosmetic.** `-gpu-ai-universal` only discourages the
    frontend from offering a stock update. The *hard* guards against a stock
@@ -154,7 +158,7 @@ haos-gpu-ai/
 ## Build
 
 ```bash
-git clone --recurse-submodules https://github.com/your-org/haos-gpu-ai.git
+git clone --recurse-submodules https://github.com/sam3gp8/haos-gpu-ai.git
 cd haos-gpu-ai
 
 # one-time: create the signing CA
