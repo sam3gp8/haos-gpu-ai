@@ -20,3 +20,8 @@ BR2_PACKAGE_HAOS_COMPUTE_INTEL=y
 BR2_PACKAGE_HAOS_COMPUTE_AMD=y
 
 BR2_PACKAGE_LINUX_FIRMWARE=y
+
+# qemu-guest-agent: host<->hypervisor integration for VM deployments (e.g.
+# Proxmox/KVM). Host-level, mirrors HAOS's ova_defconfig; inert on bare metal
+# (the overlay service only starts when the QEMU virtio guest-agent port exists).
+BR2_PACKAGE_QEMU_GUEST_AGENT=y

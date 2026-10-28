@@ -1,0 +1,18 @@
+[Unit]
+Description=QEMU Guest Agent (host integration for QEMU/KVM, e.g. Proxmox)
+# Only meaningful inside a QEMU/KVM guest: the agent talks to the hypervisor
+# over a virtio-serial port. On bare metal (e.g. the RTX 4090 appliance) that
+# port does not exist, so ConditionPathExists skips the unit cleanly - no
+# failure, no effect. BindsTo ties the agent's lifetime to the port device when
+# it is present, so it stops if the channel goes away.
+ConditionPathExists=/dev/virtio-ports/org.qemu.guest_agent.0
+BindsTo=dev-virtio\x2dports-org.qemu.guest_agent.0.device
+After=dev-virtio\x2dports-org.qemu.guest_agent.0.device
+
+[Service]
+ExecStart=-/usr/bin/qemu-ga
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

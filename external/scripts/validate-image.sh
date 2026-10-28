@@ -64,6 +64,8 @@ hasfile "etc/systemd/system/multi-user.target.wants/gpu-autodetect.service" && p
 hasfile "etc/systemd/system/timers.target.wants/haos-gpu-updater.timer"     && pass "haos-gpu-updater.timer enabled"  || fail "updater timer NOT enabled"
 [ -x "$T/usr/bin/gpu-autodetect.sh" ]   && pass "gpu-autodetect.sh executable"   || fail "gpu-autodetect.sh missing/not executable"
 [ -x "$T/usr/bin/haos-gpu-updater.sh" ] && pass "haos-gpu-updater.sh executable" || fail "haos-gpu-updater.sh missing/not executable"
+hasfile "etc/systemd/system/multi-user.target.wants/qemu-guest-agent.service" && pass "qemu-guest-agent.service enabled" || fail "qemu-guest-agent.service NOT enabled"
+[ -x "$T/usr/bin/qemu-ga" ]             && pass "qemu-ga (guest agent) present" || fail "qemu-ga missing/not executable"
 
 echo "-- version + vendor contracts --"
 info "$(grep -h '^VERSION=' "$T/etc/os-release" 2>/dev/null | head -1)"

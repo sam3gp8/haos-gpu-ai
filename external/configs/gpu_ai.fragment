@@ -24,3 +24,11 @@ BR2_PACKAGE_LINUX_FIRMWARE=y
 # glibc utilities: installs ldconfig, which nvidia-container-toolkit >=1.17
 # REQUIRES on the host (it bind-mounts the host ldconfig into GPU containers).
 BR2_PACKAGE_GLIBC_UTILS=y
+
+# qemu-guest-agent: host<->hypervisor integration for VM deployments (e.g.
+# Proxmox/KVM) - graceful shutdown, IP/fs-freeze reporting. This is HOST-level
+# OS integration (fits the host/container split), mirroring HAOS's own VM board
+# (ova_defconfig sets exactly this symbol). Inert on bare metal: the service
+# (rootfs-overlay) only starts when the QEMU virtio-serial guest-agent port
+# exists. Buildroot pulls the minimal qemu (guest-agent only) + glib2.
+BR2_PACKAGE_QEMU_GUEST_AGENT=y
