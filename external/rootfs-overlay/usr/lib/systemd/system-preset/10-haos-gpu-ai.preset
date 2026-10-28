@@ -9,3 +9,7 @@ enable gpu-autodetect.service
 enable haos-gpu-updater.timer
 enable rauc-mark-good.service
 enable seed-local-addons.service
+# qemu-guest-agent: enabled, but its unit is guarded by a ConditionPathExists on
+# the QEMU virtio-serial port, so it only actually starts inside a QEMU/KVM
+# guest (e.g. Proxmox) and is a clean no-op on bare metal.
+enable qemu-guest-agent.service
