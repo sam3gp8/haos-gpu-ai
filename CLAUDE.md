@@ -178,6 +178,30 @@ running device stays 17.3; signature is now proven, boot is the last gate.
 > 417 MB re-stage and would flip back to danger if an 18.x release ever becomes
 > `latest` again, so the real fixes stand: disable the timer, or reflash with the
 > line-pinned updater (then it compares the bare version and correctly no-ops).
+>
+> **Update 2026-11-11 (Gemini OTA audit → hardened updater).** An external audit
+> re-flagged the mechanics (all accurate) plus two real bugs. `haos-gpu-updater.sh`
+> was reworked, keeping the SAFE defaults:
+> - **Highest-VERSION selection, not newest-by-timestamp.** It now picks the
+>   highest *version* among eligible releases (busybox-safe dotted-numeric
+>   `ver_gt`), so the publish-time trap (17.3 published after 18.3) can't mis-select,
+>   and it only installs a strictly-newer version (no re-stage-same-version loop,
+>   no downgrade).
+> - **Unsuppressed `rauc info`.** Dropped `2>/dev/null`; a signature/keyring
+>   rejection is now logged as such and refused, not misreported as a "compatible
+>   mismatch."
+> - **Pending-reboot visibility.** After staging it writes `/mnt/data/haos-gpu-update-pending`
+>   and a loud journal NOTICE (we run outside Supervisor, so no UI notification),
+>   and clears the marker once the staged version is the running one.
+> - **Opt-in knobs via `/mnt/data/haos-gpu-updater.conf`** (writable; rootfs is RO),
+>   both defaulting to the safe value: `HAOS_GPU_AUTO_REBOOT=1` (reboot after
+>   staging; default 0 = stage only) and `HAOS_GPU_ALLOW_MAJOR_UPGRADE=1` (allow
+>   cross-line upgrades; default 0 = line-pinned). The line-pin stays the default —
+>   a 17→18 jump remains a deliberate manual flash unless the operator opts in.
+>
+> This lives in the rootfs, so a box only gets it once FLASHED/updated to an image
+> carrying it. The running 17.3 box still needs its one-time manual flash to 18.3
+> (verify its keyring is Sam's CA first).
 
 ---
 
