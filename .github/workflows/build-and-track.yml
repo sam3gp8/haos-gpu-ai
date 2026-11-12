@@ -22,18 +22,29 @@ permissions:
 
 env:
   UPSTREAM_REPO: home-assistant/operating-system
-  # Only AUTO-build tags on this upstream line. A major bump changes the kernel
-  # and invalidates the NVIDIA driver pairing and the version-sensitive patches
-  # (GSP path, rauc.sh call sites, create-data-partition, daemon.json), so it
-  # must be a deliberate, re-validated bump run manually with force_tag - never
-  # an unattended cron build. Set to "" to track any release.
+  # Which upstream tags the daily cron AUTO-builds.
+  #   ""        -> follow EVERY upstream release, including a new major line.
+  #   "18."     -> only auto-build the 18.x line; a major bump waits for a
+  #                manual force_tag run (the old deliberate-major-bump gate).
   #
-  # Now tracking the 18.x line (kernel 6.18.52, HAOS 18.3). The 17.x -> 18.x bump
-  # was validated: HAOS renamed hassos_* -> haos_* (the rauc compatible function,
-  # BR2_EXTERNAL_*_PATH, and the data/supervisor units) - build.sh and the
-  # seed-local-addons unit now match both names. Driver 595.84 still covers the
-  # 6.18 kernel. The next guarded boundary is 18.x -> 19.x.
-  TRACK_LINE: "18."
+  # CURRENT POSTURE: "" (full auto-follow, chosen 2026-11-12). The cron builds
+  # whatever upstream's latest release is - patch, minor, OR a new major line -
+  # with no manual step. This is SAFE because the preflight gate
+  # (external/scripts/preflight-check.sh, STRICT=1, run before any build) hard-
+  # fails on a kernel<->driver mismatch: if a future major ships a kernel the
+  # pinned NVIDIA driver (595.84) can't build against, the build goes RED in CI
+  # rather than publishing a broken image. A red build is the signal to bump the
+  # driver pin (and re-check the version-sensitive patches: GSP path, rauc.sh
+  # call sites, create-data-partition, daemon.json), then it goes green on its
+  # own. Nothing broken ever reaches a device.
+  #
+  # History: the 17.x -> 18.x bump (kernel 6.12 -> 6.18.52) was validated under
+  # the old gated posture - HAOS renamed hassos_* -> haos_* (the rauc compatible
+  # function, BR2_EXTERNAL_*_PATH, the data/supervisor units); build.sh and the
+  # seed-local-addons unit now match both names. Driver 595.84 covers 6.12->6.18.
+  # To re-arm the manual gate for a future boundary, set this back to the current
+  # major line (e.g. "18." or "19.").
+  TRACK_LINE: ""
   # Pin the HAOS builder image, OR leave blank to build it from the submodule's
   # own Dockerfile (guaranteed to match the pinned Buildroot toolchain).
   # Confirm the current published tag from the upstream repo's CI if you pin.
@@ -57,6 +68,23 @@ jobs:
         run: |
           set -euo pipefail
           force="${{ github.event.inputs.force_tag }}"
+
+          # Dotted-numeric "A strictly greater than B" (major, then minor). Used
+          # so the cron only builds a GENUINELY newer upstream release, never a
+          # backport to an older line that momentarily shows up as releases/latest
+          # (newest-by-publish-time, which is not newest-by-version). force_tag
+          # bypasses this entirely - a manual run builds whatever tag it is given.
+          ver_gt() {
+            av="$1"; bv="$2"
+            a1="${av%%.*}"; b1="${bv%%.*}"
+            case "$av" in *.*) a2="${av#*.}"; a2="${a2%%.*}";; *) a2=0;; esac
+            case "$bv" in *.*) b2="${bv#*.}"; b2="${b2%%.*}";; *) b2=0;; esac
+            case "$a1$b1$a2$b2" in *[!0-9]*) return 1;; esac   # non-numeric -> not greater
+            if [ "$a1" -ne "$b1" ]; then
+              if [ "$a1" -gt "$b1" ]; then return 0; else return 1; fi
+            fi
+            if [ "$a2" -gt "$b2" ]; then return 0; else return 1; fi
+          }
 
           if [ -n "$force" ]; then
             up="$force"
@@ -87,9 +115,15 @@ jobs:
             | sed -n 's/.*"tag_name":[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1 || true)"
           echo "our latest release: ${ours:-<none>}"
 
-          if [ -n "$force" ] || [ "$up" != "$ours" ]; then
+          # Build when: forced, OR we have no release yet, OR upstream is a
+          # strictly-newer version than our latest. The strict-newer test (not a
+          # bare !=) is what makes full-follow safe: a backport to an older line
+          # showing up as upstream releases/latest will NOT trigger a downgrade
+          # rebuild. A new major line DOES pass (its major is greater).
+          if [ -n "$force" ] || [ -z "$ours" ] || ver_gt "$up" "$ours"; then
             echo "should_build=true"  >> "$GITHUB_OUTPUT"
           else
+            echo "::notice::upstream ${up} is not newer than our latest ${ours} - skipping."
             echo "should_build=false" >> "$GITHUB_OUTPUT"
           fi
           echo "version=${up}" >> "$GITHUB_OUTPUT"
