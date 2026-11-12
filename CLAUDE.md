@@ -62,7 +62,7 @@ Device-verified anchor paths used by the gates/rebuild:
 | Area | State |
 |------|-------|
 | Running image | **HAOS 17.3-gpu-ai-universal**, Core 2026.7.1, on the 4090 PC — version-suffix decoupling working |
-| Kernel | Running: **6.12.85** (HAOS 17.3). Repo **targets HAOS 18.3 / kernel 6.18.52** (`TRACK_LINE`=`18.`); **built green — 18.3 Release published** (run 39005255151), **not yet flashed** (and bundle-signature provenance unverified) — see "18.x bump status" |
+| Kernel | Running on the box: **6.12.85** (HAOS 17.3). Repo now tracks the **whole 18.x line** — latest released **18.5** (6.18.x line); **17.3 / 18.3 / 18.4 / 18.5 all published, signed with Sam's CA** (18.3 + 17.3 bundles cryptographically verified off-box; 18.4/18.5 built with the same signing secrets) and **carrying the hardened OTA updater**. `TRACK_LINE=""` → **full auto-follow** of new upstream releases (PR #15, 2026-11-12), majors included. 18.3 = kernel 6.18.52. Box **not yet flashed** off 17.3 — see "18.x bump status" |
 | GPU host stack | NVIDIA **595.84** open modules, GSP firmware, autodetect, baked `default-runtime: nvidia`, toolkit **1.19** host-ldconfig injection — all validated live |
 | Add-on in container | 4090 = CUDA compute 8.9, 23.5 GiB; flash attention on; `q8_0` KV cache; 31/31 layers offloaded |
 | PTX-JIT | **restore validated live (2026-10-16)**: the `cuda_v13` runner completes gemma inference at ~93 tok/s, `POST /v1/chat/completions → 200`, **no `CUDA error 221`** — the handoff's remaining OS task is closed |
@@ -338,7 +338,7 @@ completes.
 
 | Component | Version | Notes |
 |-----------|---------|-------|
-| HAOS | 18.3 (target) | kernel 6.18.52; building, not yet device-verified. Last fully proven: 17.3 (kernel 6.12.85) |
+| HAOS | 18.x line (latest released **18.5**) | 18.3 = kernel 6.18.52; 18.4/18.5 on the 6.18.x line. All built + signed (Sam's CA), not yet device-verified on hardware. Last fully proven on the box: 17.3 (kernel 6.12.85) |
 | HA Core | 2026.7.1 | running image |
 | NVIDIA driver | 595.84 | open modules; Turing+/Ada; covers 6.12→6.18/6.19 |
 | nvidia-container-toolkit | 1.19 | host-ldconfig bind-mount injection |
@@ -373,9 +373,15 @@ Code is buildable on the 17.3 line as-is. To publish signed OTA releases:
    `profile=nvidia-amd` and `force_tag=<HAOS_TAG>`; iterate to green, then `all`.
 3. **Runner size:** a full HAOS build is disk/time heavy — prefer a larger or
    self-hosted runner.
-4. **Now tracking the 18.x line** (`TRACK_LINE="18."`, target 18.3 / kernel
-   6.18.52). First 18.3 build should be a manual `force_tag=18.3`, profile
-   `nvidia-amd` first, then `all`. The next guarded boundary is 18.x → 19.x.
+4. **Full auto-follow of upstream releases** (`TRACK_LINE=""`, PR #15, 2026-11-12).
+   The daily cron builds whatever upstream publishes — patch, minor, OR a new
+   major line (19.x+) — with no manual `force_tag` step. Safety: the `STRICT=1`
+   preflight gate fails the build RED if a future major's kernel outruns the
+   595.84 driver pin (nothing broken ships); and the cron's decision is
+   version-aware (`ver_gt`, not a bare `!=`) so a backport that momentarily shows
+   as upstream `releases/latest` can't trigger a downgrade rebuild. To re-arm the
+   old manual major-bump gate, set `TRACK_LINE` back to the current line (e.g.
+   `"19."`) — the dormant guard block reactivates. Latest released line: 18.5.
 5. **Building an older line on demand (e.g. 17.3, the proven-stable one).** A
    manual `force_tag=17.3` bypasses the `TRACK_LINE` guard, and every build-time
    patch matches both the 17.x (`hassos_*`) and 18.x (`haos_*`) layouts, so the
